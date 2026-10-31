@@ -571,6 +571,26 @@ class TestGroupby:
         assert expected == [(math.nan, [math.nan, math.nan]), (1.0, [1.0])]
         assert await collect(groupby(data)) == expected
 
+    async def test_keys_with_inconsistent_equality(self) -> None:
+        # The key decides by equality only when the keys are distinct objects, and
+        # itertools.groupby() asks whether they are equal, not whether they differ
+        class Key:
+            def __eq__(self, other: object) -> bool:
+                return False
+
+            def __ne__(self, other: object) -> bool:
+                return False
+
+            __hash__ = object.__hash__
+
+        a, b = Key(), Key()
+        data = [a, a, b, b, a]
+        # Key never compares equal, so these list comparisons match keys by identity
+        expected = [(a, 2), (b, 2), (a, 1)]
+        assert [(k, len(list(g))) for k, g in itertools.groupby(data)] == expected
+        for iterator in (groupby(data), groupby(aiter_from(data))):
+            assert [(k, len(g)) for k, g in await collect(iterator)] == expected
+
     async def test_checkpoints_empty_inputs(self) -> None:
         iterator: AsyncIterator[tuple[int, list[int]]]
         for iterator in (groupby([]), groupby(aiter_from([]))):
